@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TORID_AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Poppins', 'sans-serif'],
+            },
+            colors: {
+              background: 'var(--color-background)',
+              glass: 'var(--color-glass)',
+              'bubble-ai': 'var(--color-bubble-ai)',
+              'bubble-user': 'var(--color-bubble-user)',
+              accent: 'var(--color-accent)',
+              'accent-text': 'var(--color-accent-text)',
+              'border-color': 'var(--color-border)',
+              'text-primary': 'var(--text-primary)',
+              'text-secondary': 'var(--text-secondary)',
+              'text-on-user-bubble': 'var(--text-on-user-bubble)',
+              'text-on-ai-bubble': 'var(--text-on-ai-bubble)',
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      /* THEME VARIABLES */
+      :root {
+        /* Light Theme */
+        --color-background: #F9FAFB;
+        --color-glass: rgba(255, 255, 255, 0.6);
+        --color-bubble-ai: #F3F4F6;
+        --color-bubble-user: #3B82F6;
+        --color-accent: #2563EB;
+        --color-accent-text: #FFFFFF;
+        --color-border: rgba(0, 0, 0, 0.1);
+        --color-grid: rgba(0, 0, 0, 0.03);
+        --text-primary: #1F2937;
+        --text-secondary: #6B7280;
+        --text-on-user-bubble: #FFFFFF;
+        --text-on-ai-bubble: #1F2937;
+        --button-gradient: linear-gradient(-45deg, #60a5fa, #3b82f6, #2563eb, #1d4ed8);
+      }
+      .dark {
+        /* Dark Theme */
+        --color-background: #111214;
+        --color-glass: rgba(23, 24, 28, 0.5);
+        --color-bubble-ai: #2A2B30;
+        --color-bubble-user: #383a40;
+        --color-accent: #fce5d8;
+        --color-accent-text: #111214;
+        --color-border: rgba(255, 255, 255, 0.1);
+        --color-grid: rgba(255, 255, 255, 0.03);
+        --text-primary: #E5E7EB;
+        --text-secondary: #9CA3AF;
+        --text-on-user-bubble: #E5E7EB;
+        --text-on-ai-bubble: #E5E7EB;
+        --button-gradient: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+      }
+
+      /* GLOBAL STYLES */
+      body {
+        background-color: var(--color-background);
+        color: var(--text-primary);
+        background-image:
+          radial-gradient(circle at 1px 1px, var(--color-grid) 1px, transparent 0),
+          linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
+          linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
+        background-size: 1px 1px, 50px 50px, 50px 50px;
+      }
+      
+      .accent-fill {
+        fill: var(--color-accent);
+      }
+
+      /* ANIMATIONS */
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes message-in {
+        from {
+          opacity: 0;
+          transform: translateY(15px) scale(0.98);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes rgb-glow-border {
+        0% { border-color: hsl(0, 100%, 60%); box-shadow: 0 0 4px hsl(0, 100%, 60%); }
+        16% { border-color: hsl(60, 100%, 60%); box-shadow: 0 0 4px hsl(60, 100%, 60%); }
+        33% { border-color: hsl(120, 100%, 60%); box-shadow: 0 0 4px hsl(120, 100%, 60%); }
+        50% { border-color: hsl(180, 100%, 60%); box-shadow: 0 0 4px hsl(180, 100%, 60%); }
+        66% { border-color: hsl(240, 100%, 60%); box-shadow: 0 0 4px hsl(240, 100%, 60%); }
+        83% { border-color: hsl(300, 100%, 60%); box-shadow: 0 0 4px hsl(300, 100%, 60%); }
+        100% { border-color: hsl(360, 100%, 60%); box-shadow: 0 0 4px hsl(360, 100%, 60%); }
+      }
+
+      @keyframes rgb-text-glow {
+        0%   { filter: drop-shadow(0 0 2px hsl(0, 100%, 70%)); }
+        16%  { filter: drop-shadow(0 0 3px hsl(60, 100%, 70%)); }
+        33%  { filter: drop-shadow(0 0 2px hsl(120, 100%, 70%)); }
+        50%  { filter: drop-shadow(0 0 3px hsl(180, 100%, 70%)); }
+        66%  { filter: drop-shadow(0 0 2px hsl(240, 100%, 70%)); }
+        83%  { filter: drop-shadow(0 0 3px hsl(300, 100%, 70%)); }
+        100% { filter: drop-shadow(0 0 2px hsl(360, 100%, 70%)); }
+      }
+
+      .animate-rgb-text-glow {
+        animation: rgb-text-glow 4s infinite ease-in-out;
+        will-change: filter;
+      }
+
+      @keyframes button-gradient-animation {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+
+      .animate-gradient-button {
+        background: var(--button-gradient);
+        background-size: 400% 400%;
+        animation: button-gradient-animation 8s ease infinite;
+      }
+
+      .animate-rgb-glow {
+        animation: rgb-glow-border 4s linear infinite;
+        will-change: border-color, box-shadow;
+      }
+
+      .animate-fadeIn {
+        animation: fadeIn 0.4s ease-out forwards;
+      }
+      
+      .will-animate {
+        opacity: 0; /* Start hidden for entry animations */
+      }
+
+      .animate-fadeInUp {
+        animation: fadeInUp 0.5s ease-out forwards;
+      }
+
+      .animate-message-in {
+        animation: message-in 0.4s ease-out forwards;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
