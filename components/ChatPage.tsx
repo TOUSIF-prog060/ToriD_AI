@@ -13,10 +13,18 @@ const MenuIcon = ({ className, onClick }: { className: string, onClick: () => vo
     </button>
 );
 
+const ChevronRightIcon = ({ className }: { className?: string }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+    </svg>
+);
+
+
 const ChatPage: React.FC = () => {
   const [chats, setChats] = useLocalStorage<Chat[]>('chats', []);
   const [activeChatId, setActiveChatId] = useLocalStorage<string | null>('activeChatId', null);
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorage<boolean>('sidebarCollapsed', false);
   const [isTyping, setIsTyping] = React.useState(false);
 
   const handleNewChat = (isInitial = false) => {
@@ -32,7 +40,10 @@ const ChatPage: React.FC = () => {
         setChats(prevChats => [newChat, ...prevChats]);
     }
     setActiveChatId(newChat.id);
-    if (!isInitial) setIsSidebarOpen(false);
+    if (!isInitial) {
+      setIsSidebarOpen(false);
+      setIsSidebarCollapsed(false);
+    }
   };
 
   React.useEffect(() => {
@@ -127,11 +138,23 @@ const ChatPage: React.FC = () => {
         onDeleteChat={handleDeleteChat}
         isOpen={isSidebarOpen}
         setIsOpen={setIsSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        setIsCollapsed={setIsSidebarCollapsed}
       />
       <main className="flex-1 flex flex-col relative">
+        {/* Mobile menu button */}
         <div className="absolute top-4 left-4 z-40 md:hidden">
             <MenuIcon className="w-8 h-8 text-text-primary p-1 rounded-md bg-bubble-user/50 hover:bg-bubble-user/70" onClick={() => setIsSidebarOpen(true)} />
         </div>
+        {/* Desktop reopen button */}
+        {isSidebarCollapsed && (
+          <div className="absolute top-4 left-4 z-40 hidden md:block">
+            <button onClick={() => setIsSidebarCollapsed(false)} className="w-8 h-8 flex items-center justify-center text-text-primary p-1 rounded-md bg-bubble-user/50 hover:bg-bubble-user/70" aria-label="Open sidebar">
+                <ChevronRightIcon className="w-6 h-6" />
+            </button>
+          </div>
+        )}
+
         {activeChat ? (
             <ChatArea chat={activeChat} onSendMessage={handleSendMessage} isTyping={isTyping} />
         ) : (
