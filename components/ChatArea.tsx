@@ -1,3 +1,5 @@
+
+
 import React, { useEffect, useRef } from 'react';
 import { Chat } from '../types';
 import MessageInput from './MessageInput';
@@ -6,7 +8,7 @@ import TypingIndicator from './TypingIndicator';
 
 interface ChatAreaProps {
   chat: Chat;
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, file: File | null) => void;
   isTyping: boolean;
 }
 
@@ -19,9 +21,9 @@ const ChatArea: React.FC<ChatAreaProps> = ({ chat, onSendMessage, isTyping }) =>
 
   useEffect(scrollToBottom, [chat.messages, isTyping]);
   
-  const handleSend = async (text: string) => {
-    if (text.trim() === '' || isTyping) return;
-    await onSendMessage(text);
+  const handleSend = async (text: string, file: File | null) => {
+    if ((text.trim() === '' && !file) || isTyping) return;
+    await onSendMessage(text, file);
   };
 
   const isEmpty = chat.messages.length === 0;

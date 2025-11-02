@@ -1,12 +1,14 @@
+
 // FIX: Corrected import syntax for React hooks.
 import React, { useState, useEffect } from 'react';
 import LoginPage from './components/LoginPage';
 import ChatPage from './components/ChatPage';
 import useLocalStorage from './hooks/useLocalStorage';
 import CursorTrail from './components/CursorTrail';
+import SplashScreen from './components/SplashScreen';
 
 export type Theme = 'light' | 'dark';
-export type Page = 'login' | 'chat';
+export type Page = 'splash' | 'login' | 'chat';
 
 export const ThemeContext = React.createContext<{ theme: Theme; toggleTheme: () => void; }>({
   theme: 'dark',
@@ -14,7 +16,7 @@ export const ThemeContext = React.createContext<{ theme: Theme; toggleTheme: () 
 });
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('login');
+  const [currentPage, setCurrentPage] = useState<Page>('splash');
   const [theme, setTheme] = useLocalStorage<Theme>('theme', 'dark');
 
   useEffect(() => {
@@ -24,6 +26,15 @@ function App() {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+  
+  useEffect(() => {
+    if (currentPage === 'splash') {
+      const timer = setTimeout(() => {
+        setCurrentPage('login');
+      }, 2500); // Show splash for 2.5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [currentPage]);
 
   const toggleTheme = () => {
     setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
@@ -35,12 +46,14 @@ function App() {
 
   const renderPage = () => {
     switch(currentPage) {
+        case 'splash':
+            return <SplashScreen />;
         case 'login':
             return <LoginPage onLogin={handleLogin} />;
         case 'chat':
             return <ChatPage />;
         default:
-            return <LoginPage onLogin={handleLogin} />;
+            return <SplashScreen />;
     }
   }
 

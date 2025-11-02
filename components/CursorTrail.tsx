@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef } from 'react';
 
 // Colors inspired by the user-provided image (cyan, magenta, blue, green/teal)

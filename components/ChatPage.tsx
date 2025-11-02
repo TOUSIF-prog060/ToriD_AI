@@ -1,9 +1,12 @@
+
+
+
 import React from 'react';
 import ChatArea from './ChatArea';
 import Sidebar from './Sidebar';
 import { Chat, Message } from '../types';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { generateChatResponse } from '../services/geminiService';
+import { generateChatResponse, fileToBase64, attachmentCache } from '../services/geminiService';
 
 const MenuIcon = ({ className, onClick }: { className: string, onClick: () => void }) => (
     <button onClick={onClick} className={className} aria-label="Open sidebar">
@@ -78,18 +81,36 @@ const ChatPage: React.FC = () => {
 
   const activeChat = chats.find(chat => chat.id === activeChatId);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, file: File | null) => {
     if (!activeChatId || !activeChat || isTyping) return;
+    if (!text.trim() && !file) return; // Ensure there's content to send
+
+    const userMessageId = `msg-${Date.now()}`; // Generate a unique ID for the user message once
+
+    let attachmentPayload: { mimeType: string; hasData: boolean; } | undefined = undefined;
+    if (file) {
+      try {
+        const base64 = await fileToBase64(file);
+        // Store base64 data in in-memory cache using the consistent userMessageId
+        attachmentCache.set(userMessageId, { base64, mimeType: file.type });
+        attachmentPayload = { mimeType: file.type, hasData: true };
+      } catch (error) {
+        console.error("Error converting file to base64:", error);
+        // Optionally, display an error message to the user
+        return; 
+      }
+    }
 
     const userMessage: Message = {
-      id: `msg-${Date.now()}`,
+      id: userMessageId, // Use the consistent ID
       text,
       sender: 'user',
       timestamp: Date.now(),
+      attachment: attachmentPayload, 
     };
     
     // Update chat title with the first user message
-    const shouldUpdateTitle = activeChat.messages.length === 0;
+    const shouldUpdateTitle = activeChat.messages.length === 0 && text.trim() !== '';
 
     setChats(prev => prev.map(c => {
         if (c.id === activeChatId) {
@@ -104,10 +125,10 @@ const ChatPage: React.FC = () => {
     
     setIsTyping(true);
 
-    const aiResponseText = await generateChatResponse(text, activeChatId);
+    const aiResponseText = await generateChatResponse(text, file, activeChatId);
     
     const aiMessage: Message = {
-        id: `msg-${Date.now() + 1}`,
+        id: `msg-${Date.now() + 1}`, // Ensure AI message has a unique ID, slightly after user's
         sender: 'ai',
         text: aiResponseText,
         timestamp: Date.now(),
@@ -149,6 +170,7 @@ const ChatPage: React.FC = () => {
         {/* Desktop reopen button */}
         {isSidebarCollapsed && (
           <div className="absolute top-4 left-4 z-40 hidden md:block">
+            {/* FIX: Changed setIsCollapsed to setIsSidebarCollapsed to match the state variable name. */}
             <button onClick={() => setIsSidebarCollapsed(false)} className="w-8 h-8 flex items-center justify-center text-text-primary p-1 rounded-md bg-bubble-user/50 hover:bg-bubble-user/70" aria-label="Open sidebar">
                 <ChevronRightIcon className="w-6 h-6" />
             </button>

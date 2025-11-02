@@ -42,8 +42,8 @@
         --color-background: #F9FAFB;
         --color-glass: rgba(255, 255, 255, 0.6);
         --color-bubble-ai: #F3F4F6;
-        --color-bubble-user: #3B82F6;
-        --color-accent: #2563EB;
+        --color-bubble-user: #4B5563; /* From blue to gray-600 */
+        --color-accent: #1F2937; /* From blue to gray-800 */
         --color-accent-text: #FFFFFF;
         --color-border: rgba(0, 0, 0, 0.1);
         --color-grid: rgba(0, 0, 0, 0.03);
@@ -51,7 +51,7 @@
         --text-secondary: #6B7280;
         --text-on-user-bubble: #FFFFFF;
         --text-on-ai-bubble: #1F2937;
-        --button-gradient: linear-gradient(-45deg, #60a5fa, #3b82f6, #2563eb, #1d4ed8);
+        --button-gradient: linear-gradient(-45deg, #4b5563, #374151, #1f2937, #111827); /* Grayscale gradient */
       }
       .dark {
         /* Dark Theme */
@@ -79,6 +79,7 @@
           linear-gradient(to right, var(--color-grid) 1px, transparent 1px),
           linear-gradient(to bottom, var(--color-grid) 1px, transparent 1px);
         background-size: 1px 1px, 50px 50px, 50px 50px;
+        background-attachment: fixed; /* Keep background grid static */
       }
       
       .accent-fill {
@@ -169,6 +170,77 @@
 
       .animate-message-in {
         animation: message-in 0.4s ease-out forwards;
+      }
+
+      /* Splash Screen Animations */
+      @keyframes typing {
+        from { width: 0 }
+        to { width: 100% }
+      }
+
+      @keyframes blink-caret {
+        from, to { border-color: transparent }
+        50% { border-color: var(--color-accent); } /* Use accent color for cursor */
+      }
+
+      .typing-text {
+        overflow: hidden; /* Ensures the text is hidden until typed */
+        white-space: nowrap; /* Keeps the text on a single line */
+        border-right: .15em solid var(--color-accent); /* The caret */
+        /* Animation for typing and blinking cursor */
+        animation: 
+          typing 3.5s steps(40, end) forwards,
+          blink-caret .75s step-end infinite;
+        animation-delay: 1s; /* Start typing after some initial delay */
+        width: 0; /* Initial width for typing effect */
+        max-width: fit-content; /* Ensure it fits content for typing */
+      }
+
+      @keyframes grid-shift {
+          0% { background-position: 0px 0px; }
+          100% { background-position: 50px 50px; } /* Shift by one grid cell */
+      }
+
+      .animate-grid-shift {
+          animation: grid-shift 120s linear infinite; /* Very slow, continuous shift */
+      }
+
+      /* Robot Animations */
+      @keyframes slideInFromBottom {
+        from {
+          transform: translate(-50%, 100%); /* Start fully below */
+        }
+        to {
+          transform: translate(-50%, 0%); /* End at natural position */
+        }
+      }
+
+      .animate-slide-up {
+        animation: slideInFromBottom 1s ease-out forwards;
+      }
+
+      @keyframes eyeScan {
+          0%, 100% { transform: translate(0, 0); }
+          25% { transform: translate(2px, 1px); }
+          50% { transform: translate(-2px, -1px); }
+          75% { transform: translate(1px, 2px); }
+      }
+
+      .robot-eye-scan {
+          animation: eyeScan 4s ease-in-out infinite alternate;
+      }
+
+      /* Bouncy Text Animation */
+      @keyframes bouncyText {
+        0%, 100% { transform: translateY(0); }
+        20% { transform: translateY(-5px); }
+        40% { transform: translateY(0); }
+        60% { transform: translateY(-2px); }
+        80% { transform: translateY(0); }
+      }
+
+      .animate-bouncy-text {
+        animation: bouncyText 0.8s ease-out forwards;
       }
     </style>
   <script type="importmap">
