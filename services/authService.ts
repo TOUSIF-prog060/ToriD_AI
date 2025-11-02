@@ -1,21 +1,23 @@
-// This is a dummy authentication service for demonstration purposes.
-// In a real application, this would interact with a backend authentication API.
+// This file is no longer needed as authentication logic is handled directly
+// by the Supabase client in App.tsx and LoginPage.tsx.
+// It is kept empty to avoid breaking existing imports until those files are updated.
 
-interface AuthResponse {
-    success: boolean;
-    message?: string;
-    token?: string; // In a real app, this would be a JWT or similar
-}
+// The supabase client itself is now exported from supabaseClient.ts
+// import { supabase } from './supabaseClient';
 
-export const login = (email: string, password: string): Promise<AuthResponse> => {
-    return new Promise((resolve, reject) => {
-        // Simulate network delay
-        setTimeout(() => {
-            if (email === 'user@example.com' && password === 'password') {
-                resolve({ success: true, message: 'Login successful!', token: 'dummy-jwt-token' });
-            } else {
-                reject(new Error('Invalid email or password.'));
-            }
-        }, 1000); // 1 second delay
-    });
-};
+// export const login = async (email: string, password: string) => {
+//   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+//   if (error) throw error;
+//   return data;
+// };
+
+// export const signup = async (email: string, password: string) => {
+//   const { data, error } = await supabase.auth.signUp({ email, password });
+//   if (error) throw error;
+//   return data;
+// };
+
+// export const logout = async () => {
+//   const { error } = await supabase.auth.signOut();
+//   if (error) throw error;
+// };

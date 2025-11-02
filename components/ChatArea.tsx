@@ -1,32 +1,33 @@
 
 
 import React, { useEffect, useRef } from 'react';
-import { Chat } from '../types';
+import { Chat, MessageWithAttachmentData } from '../types';
 import MessageInput from './MessageInput';
 import Message from './Message';
 import TypingIndicator from './TypingIndicator';
 
 interface ChatAreaProps {
   chat: Chat;
+  messages: MessageWithAttachmentData[]; // Accept messages from parent
   onSendMessage: (text: string, file: File | null) => void;
   isTyping: boolean;
 }
 
-const ChatArea: React.FC<ChatAreaProps> = ({ chat, onSendMessage, isTyping }) => {
+const ChatArea: React.FC<ChatAreaProps> = ({ chat, messages, onSendMessage, isTyping }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   };
 
-  useEffect(scrollToBottom, [chat.messages, isTyping]);
+  useEffect(scrollToBottom, [messages, isTyping]); // Scroll on message or typing change
   
   const handleSend = async (text: string, file: File | null) => {
     if ((text.trim() === '' && !file) || isTyping) return;
     await onSendMessage(text, file);
   };
 
-  const isEmpty = chat.messages.length === 0;
+  const isEmpty = messages.length === 0; // Use local messages state
 
   return (
     <div className="flex flex-col flex-1 h-full bg-transparent p-4 md:p-6 lg:p-8">
@@ -41,7 +42,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ chat, onSendMessage, isTyping }) =>
             </div>
           ) : (
             <div className="max-w-4xl w-full mx-auto space-y-8">
-              {chat.messages.map((msg) => (
+              {messages.map((msg) => (
                 <Message key={msg.id} message={msg} />
               ))}
               {isTyping && <TypingIndicator />}

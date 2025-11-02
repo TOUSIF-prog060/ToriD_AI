@@ -1,23 +1,42 @@
 import React, { useState } from 'react';
 import AILogo from './AILogo';
-import { login } from '../services/authService';
+import { supabase } from '../services/supabaseClient'; // Import Supabase client
 
 const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
-  const [email, setEmail] = useState('user@example.com'); // Pre-fill for convenience
-  const [password, setPassword] = useState('password'); // Pre-fill for convenience
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isLoginMode, setIsLoginMode] = useState(true); // Toggle between login and signup
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
+
     try {
-      await login(email, password);
-      onLogin(); // Proceed to chat page on successful login
-    } catch (err) {
-      setError((err as Error).message);
-      console.error("Login failed:", err);
+      let authResponse;
+      if (isLoginMode) {
+        authResponse = await supabase.auth.signInWithPassword({ email, password });
+      } else {
+        authResponse = await supabase.auth.signUp({ email, password });
+      }
+
+      const { data, error: authError } = authResponse;
+
+      if (authError) {
+        throw authError;
+      }
+
+      if (data.user && data.session) {
+        onLogin(); // App.tsx will handle the page transition via onAuthStateChange
+      } else if (data.user && !data.session) {
+        setError("Please check your email to confirm your account before logging in.");
+      }
+
+    } catch (err: any) {
+      console.error(`${isLoginMode ? 'Login' : 'Sign Up'} failed:`, err);
+      setError(err.message || "An unexpected error occurred.");
     } finally {
       setIsLoading(false);
     }
@@ -36,7 +55,7 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
       </h2>
 
       <div className="w-full max-w-sm will-animate animate-fadeInUp relative z-10" style={{ animationDelay: '800ms' }}>
-        <form className="space-y-6 flex flex-col items-center" onSubmit={handleSubmit}>
+        <form className="space-y-6 flex flex-col items-center" onSubmit={handleAuth}>
           <div className="w-full max-w-[240px] mx-auto">
             <label htmlFor="email-address" className="sr-only">Email address</label>
             <input
@@ -58,7 +77,7 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               id="password"
               name="password"
               type="password"
-              autoComplete="current-password"
+              autoComplete={isLoginMode ? "current-password" : "new-password"}
               required
               className="appearance-none w-full px-4 py-2 sm:px-5 sm:py-4 border placeholder-text-secondary text-text-primary bg-bubble-ai rounded-full focus:outline-none text-sm md:text-base animate-rgb-glow"
               placeholder="Password"
@@ -69,7 +88,7 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           </div>
           
           {error && (
-            <p className="text-red-500 text-sm mt-2 text-center">{error}</p>
+            <p className="text-red-500 text-sm mt-2 text-center max-w-[240px]">{error}</p>
           )}
 
           <button
@@ -77,9 +96,17 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             className="max-w-[120px] mx-auto px-10 py-4 border border-transparent text-sm font-bold rounded-full text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-hover transition-all duration-300 transform hover:scale-105 active:scale-100 animate-gradient-button"
             disabled={isLoading}
           >
-            {isLoading ? 'Loading...' : 'Enter'}
+            {isLoading ? 'Loading...' : (isLoginMode ? 'Login' : 'Sign Up')}
           </button>
         </form>
+
+        <button
+            onClick={() => setIsLoginMode(prev => !prev)}
+            className="mt-6 text-sm text-text-secondary hover:underline transition-colors"
+            disabled={isLoading}
+        >
+            {isLoginMode ? "Need an account? Sign Up" : "Already have an account? Login"}
+        </button>
       </div>
     </div>
   );

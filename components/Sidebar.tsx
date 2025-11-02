@@ -1,4 +1,5 @@
 
+
 import React, { useContext } from 'react';
 import { Chat } from '../types';
 import { ThemeContext } from '../App';
@@ -16,7 +17,7 @@ const groupChatsByDate = (chats: Chat[]): { [key: string]: Chat[] } => {
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   chats.forEach(chat => {
-    const chatDate = new Date(chat.createdAt);
+    const chatDate = new Date(chat.created_at); // Use created_at
     let groupKey = '';
 
     if (chatDate >= today) {
@@ -74,6 +75,13 @@ const ChevronLeftIcon = ({ className }: { className: string }) => (
     </svg>
 );
 
+const LogoutIcon = ({ className }: { className: string }) => (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+    </svg>
+);
+
+
 interface SidebarProps {
   chats: Chat[];
   activeChatId: string | null;
@@ -84,9 +92,10 @@ interface SidebarProps {
   setIsOpen: (isOpen: boolean) => void;
   isCollapsed: boolean;
   setIsCollapsed: (isCollapsed: boolean) => void;
+  onLogout: () => void; // Added onLogout prop
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ chats, activeChatId, onNewChat, onSelectChat, onDeleteChat, isOpen, setIsOpen, isCollapsed, setIsCollapsed }) => {
+const Sidebar: React.FC<SidebarProps> = ({ chats, activeChatId, onNewChat, onSelectChat, onDeleteChat, isOpen, setIsOpen, isCollapsed, setIsCollapsed, onLogout }) => {
   const { theme, toggleTheme } = useContext(ThemeContext);
 
   const groupedChats = groupChatsByDate(chats);
@@ -178,6 +187,14 @@ const Sidebar: React.FC<SidebarProps> = ({ chats, activeChatId, onNewChat, onSel
                 >
                     {theme === 'light' ? <MoonIcon className="w-5 h-5" /> : <SunIcon className="w-5 h-5" />}
                     <span className="ml-3 text-sm font-medium">{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
+                </button>
+                <button
+                    onClick={onLogout}
+                    className="w-full flex items-center p-2 rounded-lg text-text-secondary hover:bg-red-500/20 hover:text-red-500 transition-colors"
+                    aria-label="Logout"
+                >
+                    <LogoutIcon className="w-5 h-5" />
+                    <span className="ml-3 text-sm font-medium">Logout</span>
                 </button>
             </div>
         </div>

@@ -249,13 +249,22 @@
     "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
+    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.78.0"
   }
 }
 </script>
 </head>
   <body>
     <div id="root"></div>
+    <!-- 
+      IMPORTANT: For Supabase integration, ensure you have the following environment variables configured.
+      If using Vite, these should be prefixed with VITE_ in your .env file (e.g., VITE_SUPABASE_URL):
+      SUPABASE_URL
+      SUPABASE_ANON_KEY
+      These should be set in your development environment (e.g., a .env file)
+      and securely configured in your deployment environment.
+    -->
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

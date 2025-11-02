@@ -1,8 +1,7 @@
 
 
-
 import React, { useState } from 'react';
-import { Message as MessageType } from '../types';
+import { MessageWithAttachmentData } from '../types';
 import { attachmentCache } from '../services/geminiService'; // Import the cache
 
 const UserIcon = () => (
@@ -42,7 +41,7 @@ const PdfIcon = ({ className }: { className: string }) => (
   </svg>
 );
 
-const formatTimestamp = (timestamp: number) => {
+const formatTimestamp = (timestamp: string) => { // Expects ISO string
     return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
@@ -60,14 +59,14 @@ const CheckIcon = ({ className }: { className: string }) => (
 );
 
 
-const Message: React.FC<{ message: MessageType }> = ({ message }) => {
+const Message: React.FC<{ message: MessageWithAttachmentData }> = ({ message }) => {
   const isUser = message.sender === 'user';
   const [isCopied, setIsCopied] = useState(false);
 
   const handleCopy = async () => {
     if (isCopied) return;
     try {
-      await navigator.clipboard.writeText(message.text);
+      await navigator.clipboard.writeText(message.text_content); // Use text_content
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000); // Reset icon after 2 seconds
     } catch (err) {
@@ -75,8 +74,10 @@ const Message: React.FC<{ message: MessageType }> = ({ message }) => {
     }
   };
 
-  // Retrieve attachment data from in-memory cache if available
-  const attachmentData = message.attachment?.hasData ? attachmentCache.get(message.id) : undefined;
+  // Retrieve attachment data from in-memory cache if available, prioritize message.attachment_base64 if present (for optimistic UI)
+  const attachmentData = message.attachment_base64 
+    ? { base64: message.attachment_base64, mimeType: message.attachment_mime_type || '' } 
+    : (message.attachment_mime_type ? attachmentCache.get(message.id) : undefined);
   
   return (
     <div className={`flex items-end gap-3 ${isUser ? 'justify-end' : 'justify-start'} animate-message-in`}>
@@ -90,7 +91,7 @@ const Message: React.FC<{ message: MessageType }> = ({ message }) => {
                     {attachmentData.mimeType.startsWith('image/') ? (
                         <img 
                             src={`data:${attachmentData.mimeType};base64,${attachmentData.base64}`} 
-                            alt="Uploaded" 
+                            alt={message.attachment_file_name || "Uploaded attachment"} 
                             className="max-w-full h-auto rounded-lg shadow-md" 
                             style={{ maxHeight: '200px' }} // Limit height for display
                         />
@@ -102,19 +103,19 @@ const Message: React.FC<{ message: MessageType }> = ({ message }) => {
                             className="flex items-center space-x-2 text-text-primary hover:underline"
                         >
                             <PdfIcon className="w-6 h-6 text-red-500 flex-shrink-0" />
-                            <span>View PDF</span>
+                            <span>View {message.attachment_file_name || 'PDF'}</span>
                         </a>
                     ) : (
                         <div className="flex items-center space-x-2 text-text-primary">
-                            <span className="text-sm">Attached File ({attachmentData.mimeType})</span>
+                            <span className="text-sm">Attached File ({message.attachment_file_name || attachmentData.mimeType})</span>
                         </div>
                     )}
                 </div>
             )}
-            <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text_content}</p> {/* Use text_content */}
           </div>
           <span className="text-xs text-text-secondary mt-2 px-1">
-            {formatTimestamp(message.timestamp)}
+            {formatTimestamp(message.created_at)} {/* Use created_at */}
           </span>
         </div>
         

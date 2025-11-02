@@ -1,12 +1,13 @@
 
-
-
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import ChatArea from './ChatArea';
 import Sidebar from './Sidebar';
-import { Chat, Message } from '../types';
+import { Chat, Message, MessageWithAttachmentData } from '../types';
 import useLocalStorage from '../hooks/useLocalStorage';
-import { generateChatResponse, fileToBase64, attachmentCache } from '../services/geminiService';
+import { generateChatResponse, fileToBase64, attachmentCache, loadChatHistoryIntoGemini, getOrCreateGeminiChatSession } from '../services/geminiService';
+import { supabase } from '../services/supabaseClient';
+import { Session } from '@supabase/supabase-js';
+
 
 const MenuIcon = ({ className, onClick }: { className: string, onClick: () => void }) => (
     <button onClick={onClick} className={className} aria-label="Open sidebar">
@@ -23,129 +24,253 @@ const ChevronRightIcon = ({ className }: { className?: string }) => (
 );
 
 
-const ChatPage: React.FC = () => {
-  const [chats, setChats] = useLocalStorage<Chat[]>('chats', []);
-  const [activeChatId, setActiveChatId] = useLocalStorage<string | null>('activeChatId', null);
+interface ChatPageProps {
+  session: Session;
+  onLogout: () => void;
+}
+
+const ChatPage: React.FC<ChatPageProps> = ({ session, onLogout }) => {
+  const userId = session.user.id;
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<MessageWithAttachmentData[]>([]); // Messages for the active chat
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useLocalStorage<boolean>('sidebarCollapsed', false);
   const [isTyping, setIsTyping] = React.useState(false);
 
-  const handleNewChat = (isInitial = false) => {
-    const newChat: Chat = {
-        id: `chat-${Date.now()}`,
-        title: 'New Chat',
-        messages: [],
-        createdAt: Date.now(),
+  // --- Initial Chat/Message Loading and Realtime Subscriptions ---
+  useEffect(() => {
+    if (!userId) return;
+
+    // Fetch user's chats
+    const fetchChats = async () => {
+      const { data, error } = await supabase
+        .from('chats')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error("Error fetching chats:", error);
+      } else {
+        setChats(data || []);
+        if (data && data.length > 0 && !activeChatId) {
+            setActiveChatId(data[0].id);
+        } else if (data && data.length === 0) {
+            handleNewChat(true); // Create an initial chat if none exist
+        }
+      }
     };
-    if (isInitial) {
-        setChats([newChat]);
-    } else {
-        setChats(prevChats => [newChat, ...prevChats]);
+
+    fetchChats();
+
+    // Realtime subscription for chats
+    const chatChannel = supabase
+        .channel('public:chats')
+        .on('postgres_changes', 
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'chats',
+                filter: `user_id=eq.${userId}`
+            }, 
+            (payload) => {
+                // Ensure payload.new and payload.old are correctly typed as Chat
+                const newChat = payload.new as Chat;
+                const oldChat = payload.old as Chat;
+                if (payload.eventType === 'INSERT') {
+                    setChats(prev => [newChat, ...prev]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setChats(prev => prev.map(c => c.id === newChat.id ? newChat : c));
+                } else if (payload.eventType === 'DELETE') {
+                    setChats(prev => prev.filter(c => c.id !== oldChat.id));
+                    if (activeChatId === oldChat.id) {
+                        setActiveChatId(null); // Will trigger logic to select new chat or create one
+                    }
+                }
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(chatChannel);
+    };
+  }, [userId, activeChatId]); // Refetch chats if userId changes
+
+  // Effect to manage activeChatId and messages for the active chat
+  useEffect(() => {
+    if (!activeChatId || !userId) {
+        setMessages([]); // Clear messages if no active chat
+        return;
     }
-    setActiveChatId(newChat.id);
-    if (!isInitial) {
-      setIsSidebarOpen(false);
-      setIsSidebarCollapsed(false);
+
+    // Fetch messages for the active chat
+    const fetchMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('chat_id', activeChatId)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.error("Error fetching messages:", error);
+      } else {
+        const messagesWithAttachments: MessageWithAttachmentData[] = data?.map(msg => ({
+            ...msg,
+            attachment_base64: attachmentCache.get(msg.id)?.base64, // Load from cache if available
+        })) || [];
+        setMessages(messagesWithAttachments);
+
+        // FIX: Load chat history for Gemini and pass it to the chat session
+        const historyForGemini = await loadChatHistoryIntoGemini(activeChatId, userId);
+        getOrCreateGeminiChatSession(activeChatId, historyForGemini);
+      }
+    };
+
+    fetchMessages();
+
+    // Realtime subscription for messages in the active chat
+    const messageChannel = supabase
+        .channel(`public:messages:chat_id=eq.${activeChatId}`)
+        .on('postgres_changes', 
+            { 
+                event: '*', 
+                schema: 'public', 
+                table: 'messages',
+                filter: `chat_id=eq.${activeChatId}`
+            }, 
+            (payload) => {
+                const newMessage = payload.new as Message;
+                const oldMessage = payload.old as Message;
+                if (payload.eventType === 'INSERT') {
+                    setMessages(prev => {
+                        // Ensure no duplicates if message is already there (e.g., from send logic)
+                        if (!prev.some(m => m.id === newMessage.id)) {
+                             return [...prev, newMessage];
+                        }
+                        return prev;
+                    });
+                } else if (payload.eventType === 'UPDATE') {
+                    setMessages(prev => prev.map(m => m.id === newMessage.id ? newMessage : m));
+                } else if (payload.eventType === 'DELETE') {
+                    setMessages(prev => prev.filter(m => m.id !== oldMessage.id));
+                }
+            }
+        )
+        .subscribe();
+    
+    return () => {
+        supabase.removeChannel(messageChannel);
+    };
+  }, [activeChatId, userId]);
+
+
+  const handleNewChat = async (isInitial = false) => {
+    if (!userId) return;
+
+    setIsTyping(false); // Stop typing indicator for new chat
+
+    const { data, error } = await supabase
+      .from('chats')
+      .insert({ user_id: userId, title: 'New Chat' })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating new chat:", error);
+    } else if (data) {
+      setActiveChatId(data.id);
+      if (!isInitial) {
+        setIsSidebarOpen(false);
+        setIsSidebarCollapsed(false);
+      }
     }
   };
-
-  React.useEffect(() => {
-    if (chats.length === 0) {
-      handleNewChat(true);
-    } else if (!activeChatId || !chats.find(c => c.id === activeChatId)) {
-      const sortedChats = [...chats].sort((a, b) => b.createdAt - a.createdAt);
-      setActiveChatId(sortedChats[0]?.id || null);
-    }
-  }, []);
 
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
     setIsSidebarOpen(false);
   };
 
-  const handleDeleteChat = (id: string) => {
-    setChats(prevChats => {
-        const newChats = prevChats.filter(chat => chat.id !== id);
-        if (activeChatId === id) {
-            if (newChats.length > 0) {
-                const sortedChats = [...newChats].sort((a, b) => b.createdAt - a.createdAt);
-                setActiveChatId(sortedChats[0].id);
-            } else {
-                handleNewChat(true);
-                return [];
-            }
-        }
-        return newChats;
-    });
+  const handleDeleteChat = async (id: string) => {
+    if (!userId) return;
+
+    const { error } = await supabase
+      .from('chats')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error("Error deleting chat:", error);
+    } else {
+      // Realtime subscription will handle updating the `chats` state
+      // and setting `activeChatId` to null if the active chat was deleted.
+    }
   };
+
+  // Ensure activeChatId is always valid or reset
+  useEffect(() => {
+    if (chats.length > 0 && (!activeChatId || !chats.find(c => c.id === activeChatId))) {
+        setActiveChatId(chats[0].id);
+    } else if (chats.length === 0 && activeChatId) {
+        setActiveChatId(null); // No chats left
+    }
+  }, [chats, activeChatId]);
+
 
   const activeChat = chats.find(chat => chat.id === activeChatId);
 
   const handleSendMessage = async (text: string, file: File | null) => {
-    if (!activeChatId || !activeChat || isTyping) return;
+    if (!activeChatId || !activeChat || isTyping || !userId) return;
     if (!text.trim() && !file) return; // Ensure there's content to send
 
-    const userMessageId = `msg-${Date.now()}`; // Generate a unique ID for the user message once
+    // Temporary ID for immediate UI update, actual ID will come from Supabase
+    const tempMessageId = `temp-${Date.now()}`; 
 
-    let attachmentPayload: { mimeType: string; hasData: boolean; } | undefined = undefined;
+    let attachmentMimeType: string | undefined = undefined;
+    let attachmentFileName: string | undefined = undefined;
+    let attachmentBase64: string | undefined = undefined;
+
     if (file) {
       try {
-        const base64 = await fileToBase64(file);
-        // Store base64 data in in-memory cache using the consistent userMessageId
-        attachmentCache.set(userMessageId, { base64, mimeType: file.type });
-        attachmentPayload = { mimeType: file.type, hasData: true };
+        attachmentBase64 = await fileToBase64(file);
+        attachmentCache.set(tempMessageId, { base64: attachmentBase64, mimeType: file.type });
+        attachmentMimeType = file.type;
+        attachmentFileName = file.name;
       } catch (error) {
         console.error("Error converting file to base64:", error);
-        // Optionally, display an error message to the user
         return; 
       }
     }
 
-    const userMessage: Message = {
-      id: userMessageId, // Use the consistent ID
-      text,
+    const userMessage: MessageWithAttachmentData = {
+      id: tempMessageId,
+      chat_id: activeChatId,
+      user_id: userId,
+      text_content: text,
       sender: 'user',
-      timestamp: Date.now(),
-      attachment: attachmentPayload, 
+      created_at: new Date().toISOString(),
+      attachment_mime_type: attachmentMimeType,
+      attachment_file_name: attachmentFileName,
+      attachment_base64: attachmentBase64,
     };
     
-    // Update chat title with the first user message
-    const shouldUpdateTitle = activeChat.messages.length === 0 && text.trim() !== '';
-
-    setChats(prev => prev.map(c => {
-        if (c.id === activeChatId) {
-            const updatedChat = { ...c, messages: [...c.messages, userMessage] };
-            if (shouldUpdateTitle) {
-                updatedChat.title = text.substring(0, 30) + (text.length > 30 ? '...' : '');
-            }
-            return updatedChat;
-        }
-        return c;
-    }));
+    // Optimistic UI update
+    setMessages(prev => [...prev, userMessage]);
+    
+    // Update chat title with the first user message if needed
+    if (activeChat.title === 'New Chat' && text.trim() !== '') {
+        await supabase.from('chats').update({ title: text.substring(0, 30) + (text.length > 30 ? '...' : '') }).eq('id', activeChatId);
+    }
     
     setIsTyping(true);
 
-    const aiResponseText = await generateChatResponse(text, file, activeChatId);
+    const aiResponseText = await generateChatResponse(text, file, activeChatId, userId);
     
-    const aiMessage: Message = {
-        id: `msg-${Date.now() + 1}`, // Ensure AI message has a unique ID, slightly after user's
-        sender: 'ai',
-        text: aiResponseText,
-        timestamp: Date.now(),
-    };
-
-    setChats(prev => prev.map(c => {
-      if (c.id === activeChatId) {
-          // Make sure we are updating the chat with the user message already in it
-          const currentMessages = (chats.find(chat => chat.id === activeChatId) || c).messages;
-          const messagesWithUser = currentMessages.some(m => m.id === userMessage.id) 
-            ? currentMessages 
-            : [...currentMessages, userMessage];
-          return { ...c, messages: [...messagesWithUser, aiMessage] };
-      }
-      return c;
-    }));
-
+    // Realtime subscription will handle adding the actual user and AI messages from DB
+    // We only update `isTyping` here.
     setIsTyping(false);
   };
 
@@ -161,6 +286,7 @@ const ChatPage: React.FC = () => {
         setIsOpen={setIsSidebarOpen}
         isCollapsed={isSidebarCollapsed}
         setIsCollapsed={setIsSidebarCollapsed}
+        onLogout={onLogout} // Pass onLogout to Sidebar
       />
       <main className="flex-1 flex flex-col relative">
         {/* Mobile menu button */}
@@ -178,7 +304,7 @@ const ChatPage: React.FC = () => {
         )}
 
         {activeChat ? (
-            <ChatArea chat={activeChat} onSendMessage={handleSendMessage} isTyping={isTyping} />
+            <ChatArea chat={activeChat} messages={messages} onSendMessage={handleSendMessage} isTyping={isTyping} />
         ) : (
              <div className="flex flex-col items-center justify-center h-full text-center text-text-secondary">
                 <h2 className="text-2xl font-bold font-display text-text-primary">Select a chat or start a new one</h2>
