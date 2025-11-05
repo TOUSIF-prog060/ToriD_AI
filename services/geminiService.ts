@@ -1,9 +1,9 @@
-import { GoogleGenAI, Chat as GenAIChat, Part, Content } from "@google/genai";
+import { GoogleGenAI, Chat as GenAIChat, Part, Content, FunctionDeclaration, Type } from "@google/genai";
 import { supabase } from "./supabaseClient"; // Import Supabase client
-import { Message, Chat } from "../types";
+import { Message, MessageWithAttachmentData, N8nWorkflow, Chat } from "../types";
+import { searchWorkflows } from './n8nService';
 
 // Ensure you have your API_KEY set up in your environment variables.
-// This will be automatically picked up by the execution environment.
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
 }
@@ -11,7 +11,6 @@ if (!process.env.API_KEY) {
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // In-memory cache for attachment base64 data to avoid localStorage quota issues.
-// This data will not persist across page reloads.
 export const attachmentCache = new Map<string, { base64: string; mimeType: string; }>();
 
 // Utility function to convert a File object to a base64 string
@@ -20,7 +19,6 @@ export const fileToBase64 = (file: File): Promise<string> => {
         const reader = new FileReader();
         reader.onload = () => {
             if (typeof reader.result === 'string') {
-                // Extract base64 part (remove data:image/png;base64,)
                 const base64String = reader.result.split(',')[1];
                 resolve(base64String);
             } else {
@@ -32,11 +30,23 @@ export const fileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-// Map to store active Gemini chat sessions by chatId.
-// This is to maintain the chat context for the Gemini API, separate from DB persistence.
 const activeGeminiChats = new Map<string, GenAIChat>();
 
-// FIX: Updated to accept initialHistory for seeding the chat session
+const n8nTool: FunctionDeclaration = {
+  name: 'search_n8n_workflows',
+  description: 'Search for available n8n automation workflows based on a user query. Use this to find automations for tasks like sending emails, managing CRM, creating documents, etc.',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      query: {
+        type: Type.STRING,
+        description: 'A search query describing the desired automation task, e.g., "send an email" or "add a new lead".'
+      }
+    },
+    required: ['query']
+  }
+};
+
 export const getOrCreateGeminiChatSession = (chatId: string, initialHistory: Content[] = []): GenAIChat => {
     if (activeGeminiChats.has(chatId)) {
         return activeGeminiChats.get(chatId)!;
@@ -44,10 +54,10 @@ export const getOrCreateGeminiChatSession = (chatId: string, initialHistory: Con
 
     const newChat = ai.chats.create({
         model: 'gemini-2.5-flash',
-        // FIX: Pass initial history to the chat creation
         history: initialHistory,
         config: {
-            systemInstruction: "You are TORID_AI, a helpful and friendly AI assistant. Provide clear, concise, and informative answers.",
+            systemInstruction: "You are TORID_AI, a helpful and friendly AI assistant that can also trigger automations. When a user asks to perform a task that could be automated, use the search_n8n_workflows tool to find relevant workflows.",
+            tools: [{ functionDeclarations: [n8nTool] }]
         },
     });
 
@@ -55,12 +65,10 @@ export const getOrCreateGeminiChatSession = (chatId: string, initialHistory: Con
     return newChat;
 };
 
-// FIX: Modified to return history for Gemini chat creation instead of directly manipulating chat.history
 export const loadChatHistoryIntoGemini = async (chatId: string, userId: string): Promise<Content[]> => {
-    // Fetch messages from Supabase for the given chat
     const { data: messages, error } = await supabase
         .from('messages')
-        .select('id, sender, text_content, attachment_mime_type') // Select ID to potentially use with attachmentCache
+        .select('id, sender, text_content, attachment_mime_type')
         .eq('chat_id', chatId)
         .eq('user_id', userId)
         .order('created_at', { ascending: true });
@@ -70,19 +78,8 @@ export const loadChatHistoryIntoGemini = async (chatId: string, userId: string):
         return [];
     }
 
-    // Convert Supabase messages to Gemini Content format
     const history: Content[] = messages.map(msg => {
         const parts: Part[] = [{ text: msg.text_content }];
-        // Note: Attachment data itself is not loaded here from Supabase storage,
-        // as attachmentCache is in-memory and not persistent across reloads.
-        // For Gemini to process historical images, they would need to be re-uploaded or fetched from persistent storage.
-        // For now, only text content is re-fed to Gemini for historical messages.
-        // If attachment_mime_type exists and base64 data was available (e.g., from a persistent cache),
-        // one might add:
-        // if (msg.attachment_mime_type && attachmentCache.has(msg.id)) {
-        //   const cached = attachmentCache.get(msg.id)!;
-        //   parts.push({ inlineData: { mimeType: cached.mimeType, data: cached.base64 } });
-        // }
         return {
             role: msg.sender === 'user' ? 'user' : 'model',
             parts: parts,
@@ -91,38 +88,30 @@ export const loadChatHistoryIntoGemini = async (chatId: string, userId: string):
     return history;
 };
 
-
-export const generateChatResponse = async (text: string, file: File | null, chatId: string, userId: string): Promise<string> => {
+// Returns the AI message object after saving everything to the DB
+export const generateChatResponse = async (text: string, file: File | null, chatId: string, userId: string): Promise<MessageWithAttachmentData> => {
     try {
-        const geminiChat = getOrCreateGeminiChatSession(chatId);
-        
-        const contentsParts: Part[] = []; 
-
+        // 1. Save user message to Supabase
+        const contentsParts: Part[] = [];
         if (text.trim()) {
             contentsParts.push({ text: text });
         }
 
-        let attachmentMimeType: string | undefined = undefined;
-        let attachmentFileName: string | undefined = undefined;
-        let attachmentBase64Data: string | undefined = undefined;
+        let attachmentMimeType: string | undefined;
+        let attachmentFileName: string | undefined;
+        let attachmentBase64Data: string | undefined;
 
         if (file) {
             attachmentBase64Data = await fileToBase64(file);
-            contentsParts.push({
-                inlineData: {
-                    mimeType: file.type,
-                    data: attachmentBase64Data,
-                },
-            });
+            contentsParts.push({ inlineData: { mimeType: file.type, data: attachmentBase64Data } });
             attachmentMimeType = file.type;
             attachmentFileName = file.name;
         }
 
         if (contentsParts.length === 0) {
-            return "Please provide some text or an image.";
+            throw new Error("No content to send.");
         }
         
-        // 1. Save user message to Supabase
         const userMessageToSave: Omit<Message, 'id' | 'created_at'> = {
             chat_id: chatId,
             user_id: userId,
@@ -131,67 +120,76 @@ export const generateChatResponse = async (text: string, file: File | null, chat
             attachment_mime_type: attachmentMimeType,
             attachment_file_name: attachmentFileName,
         };
+        const { data: userMessageData, error: userMessageError } = await supabase.from('messages').insert(userMessageToSave).select().single();
+        if (userMessageError) throw userMessageError;
 
-        const { data: userMessageData, error: userMessageError } = await supabase
-            .from('messages')
-            .insert(userMessageToSave)
-            .select()
-            .single();
-
-        if (userMessageError) {
-            console.error("Error saving user message to Supabase:", userMessageError);
-            throw userMessageError;
-        }
-
-        // Store attachment in client-side cache for display
         if (attachmentBase64Data && userMessageData) {
             attachmentCache.set(userMessageData.id, { base64: attachmentBase64Data, mimeType: attachmentMimeType! });
         }
 
+        // 2. Send to Gemini and handle response
+        const geminiChat = getOrCreateGeminiChatSession(chatId);
+        const geminiMessageContent: string | Part[] = contentsParts.length === 1 && 'text' in contentsParts[0] && !file ? contentsParts[0].text : contentsParts;
+        const result = await geminiChat.sendMessage({ message: geminiMessageContent });
+        
+        const functionCalls = result.functionCalls;
+        
+        // Handle Function Calling for n8n
+        if (functionCalls && functionCalls.length > 0 && functionCalls[0].name === 'search_n8n_workflows') {
+            const query = functionCalls[0].args.query as string;
+            const workflows = await searchWorkflows(query);
 
-        // 2. Send message to Gemini API
-        // FIX: Adjust message payload to match SendMessageParameters type directly
-        const geminiMessageContent: string | Part[] = contentsParts.length === 1 && 'text' in contentsParts[0] && !file
-            ? contentsParts[0].text // If only a single text part and no file, send as string
-            : contentsParts;        // Otherwise, send as Part[]
+            let aiMessageText: string;
+            let isWorkflowSuggestion = false;
 
-        const response = await geminiChat.sendMessage({ message: geminiMessageContent });
-        const aiResponseText = response.text;
+            if (workflows.length > 0) {
+                aiMessageText = `I found a few workflows related to "${query}". You can run them directly from here:`;
+                isWorkflowSuggestion = true;
+            } else {
+                aiMessageText = `I couldn't find any n8n workflows for "${query}". I can still help with other tasks, though.`;
+            }
+            
+            const aiMessageToSave: Omit<Message, 'id' | 'created_at'> = {
+                chat_id: chatId, user_id: userId, sender: 'ai', text_content: aiMessageText, is_workflow_suggestion: isWorkflowSuggestion,
+            };
+            const { data: aiMessageData, error: aiMessageError } = await supabase.from('messages').insert(aiMessageToSave).select().single();
+            if (aiMessageError) throw aiMessageError;
 
-        // 3. Save AI response to Supabase
-        const aiMessageToSave: Omit<Message, 'id' | 'created_at'> = {
-            chat_id: chatId,
-            user_id: userId,
-            sender: 'ai',
-            text_content: aiResponseText,
-        };
-
-        const { error: aiMessageError } = await supabase
-            .from('messages')
-            .insert(aiMessageToSave);
-
-        if (aiMessageError) {
-            console.error("Error saving AI message to Supabase:", aiMessageError);
-            throw aiMessageError;
+            return { ...aiMessageData, workflows: workflows.length > 0 ? workflows : undefined };
         }
         
-        return aiResponseText;
+        // Handle standard text response
+        const aiResponseText = result.text;
+        const aiMessageToSave: Omit<Message, 'id' | 'created_at'> = {
+            chat_id: chatId, user_id: userId, sender: 'ai', text_content: aiResponseText,
+        };
+        const { data: aiMessageData, error: aiMessageError } = await supabase.from('messages').insert(aiMessageToSave).select().single();
+        if (aiMessageError) throw aiMessageError;
+
+        return aiMessageData;
 
     } catch (error) {
-        console.error("Error generating response from Gemini API or saving to Supabase:", error);
+        console.error("Error in generateChatResponse:", error);
         
-        let errorMessage = "Sorry, something went wrong while trying to get a response.";
+        let errorMessage = "Sorry, something went wrong.";
         if (error instanceof Error) {
-            if (error.message.includes('API key not valid')) {
-                errorMessage = "The provided API key is not valid. Please check your configuration.";
-            } else if (error.message.includes('fetch failed') || error.message.includes('network error')) {
-                 errorMessage = "I couldn't connect to the AI service or Supabase. Please check your network connection.";
-            } else if (error.message.includes('media parsing failed')) {
-                errorMessage = "Sorry, I had trouble processing the image. Please try another one or a different format.";
-            } else if (error.message.includes('Supabase') || error.message.includes('Postgres')) {
-                errorMessage = "There was a database issue. Please try again or contact support.";
-            }
+            if (error.message.includes('API key not valid')) errorMessage = "The Gemini API key is not valid.";
+            else if (error.message.includes('n8n')) errorMessage = error.message; // Pass n8n errors through
+            else if (error.message.includes('fetch failed')) errorMessage = "I couldn't connect to the AI service or Supabase. Please check your network.";
+            else if (error.message.includes('media parsing failed')) errorMessage = "Sorry, I had trouble processing the image.";
+            else if (error.message.includes('Supabase') || error.message.includes('Postgres')) errorMessage = "There was a database issue.";
         }
-        return errorMessage;
+
+        const errorMsgData: MessageWithAttachmentData = {
+          id: `error-${Date.now()}`,
+          chat_id: chatId,
+          user_id: userId,
+          sender: 'ai',
+          text_content: errorMessage,
+          created_at: new Date().toISOString()
+        };
+        
+        // Don't save this temporary error message to the DB
+        return errorMsgData;
     }
 };

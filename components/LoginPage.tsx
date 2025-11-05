@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AILogo from './AILogo';
-import { supabase } from '../services/supabaseClient'; // Import Supabase client
+import { supabase, supabaseUrl } from '../services/supabaseClient'; // Import Supabase client and URL
 
 const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
@@ -13,6 +13,13 @@ const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
+
+    // Prevent auth attempt if Supabase is not configured
+    if (supabaseUrl.includes('placeholder.supabase.co')) {
+      setError("Supabase is not configured. Please add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to your .env file.");
+      setIsLoading(false);
+      return;
+    }
 
     try {
       let authResponse;

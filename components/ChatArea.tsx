@@ -1,7 +1,8 @@
 
 
+
 import React, { useEffect, useRef } from 'react';
-import { Chat, MessageWithAttachmentData } from '../types';
+import { Chat, MessageWithAttachmentData, N8nWorkflow } from '../types';
 import MessageInput from './MessageInput';
 import Message from './Message';
 import TypingIndicator from './TypingIndicator';
@@ -11,9 +12,10 @@ interface ChatAreaProps {
   messages: MessageWithAttachmentData[]; // Accept messages from parent
   onSendMessage: (text: string, file: File | null) => void;
   isTyping: boolean;
+  onExecuteWorkflow: (workflowId: string, workflowName: string) => void;
 }
 
-const ChatArea: React.FC<ChatAreaProps> = ({ chat, messages, onSendMessage, isTyping }) => {
+const ChatArea: React.FC<ChatAreaProps> = ({ chat, messages, onSendMessage, isTyping, onExecuteWorkflow }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -27,7 +29,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ chat, messages, onSendMessage, isTy
     await onSendMessage(text, file);
   };
 
-  const isEmpty = messages.length === 0; // Use local messages state
+  const isEmpty = messages.length === 0;
 
   return (
     <div className="flex flex-col flex-1 h-full bg-transparent p-4 md:p-6 lg:p-8">
@@ -43,7 +45,7 @@ const ChatArea: React.FC<ChatAreaProps> = ({ chat, messages, onSendMessage, isTy
           ) : (
             <div className="max-w-4xl w-full mx-auto space-y-8">
               {messages.map((msg) => (
-                <Message key={msg.id} message={msg} />
+                <Message key={msg.id} message={msg} onExecuteWorkflow={onExecuteWorkflow} />
               ))}
               {isTyping && <TypingIndicator />}
               <div ref={messagesEndRef} />

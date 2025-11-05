@@ -1,0 +1,21 @@
+{
+  "short_name": "TORID_AI",
+  "name": "TORID_AI Assistant",
+  "description": "TORID_AI is a powerful conversational AI assistant powered by Google Gemini.",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#111214",
+  "background_color": "#111214"
+}

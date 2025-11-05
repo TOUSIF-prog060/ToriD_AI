@@ -15,11 +15,19 @@ const getEnv = (key: string): string | undefined => {
   return undefined;
 };
 
-const supabaseUrl = getEnv('SUPABASE_URL');
-const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY');
+// Use placeholder values if environment variables are not set.
+// This allows the app to render without crashing, though Supabase functionality will not work
+// until valid credentials are provided in a .env file for local development.
+export const supabaseUrl = getEnv('SUPABASE_URL') || 'https://placeholder.supabase.co';
+export const supabaseAnonKey = getEnv('SUPABASE_ANON_KEY') || 'placeholder-anon-key';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Supabase URL and/or Anon Key environment variables not set. For Vite projects, please ensure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are configured in your .env file.');
+if (supabaseUrl === 'https://placeholder.supabase.co' || supabaseAnonKey === 'placeholder-anon-key') {
+  console.warn(
+    'Supabase environment variables are not set. Using placeholder values. ' +
+    'The app will render, but authentication and database features will not work. ' +
+    'For local development, please create a .env file with VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.'
+  );
 }
+
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
